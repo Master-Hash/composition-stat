@@ -1,0 +1,13 @@
+[tool.pdm]
+
+[project]
+name = ""
+version = ""
+description = ""
+authors = [
+    {name = "Master-Hash", email = "hash@hash.memorial"},
+]
+dependencies = [
+]
+requires-python = ">=3.11"
+license = {text = "Unlicense"}
