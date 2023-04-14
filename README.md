@@ -30,6 +30,8 @@ Les statistiques de mes compositions.
 
 ### 交叉引用
 
+* 有多少我写好却没交的文章？
+
 ## 语言选择
 
 JavaScript 有诱人的 URL global、Promise API 和正则字面量，Python 虽然也有 urllib.parse、asyncio 和 re，但远远没那么顺手。
@@ -50,8 +52,11 @@ class Composition:
     data: str
     item_type: Literal["人", "事", "物", "情思"]
     title: str
-    # TODO
-    # path: str
+    date: date | None
+
+    @property
+        def path(self) -> str: ...
+
     footnotes: list[Footnote] = field(default_factory=list)
     wiki_link: list[ItemLink] = field(default_factory=list)
 
@@ -60,11 +65,29 @@ class Composition:
 class Footnote:
     data: str
     url: ParseResult | None
-    item_from: Composition
+    item_to: Composition | None = None
 
 
 @dataclass
 class WikiLink:
     item_from: Composition
     item_to: Composition
+
+
+"""
+Valid WikiLink:
+[家母]: 家母.md "家母"
+[家母]: ../人/家母 "家母"
+[家母]: ../人/家母.md "家母"
+[家母#怀疑论者]: ../人/家母.md "家母"
+[Word Power Made Easy]: <../物/Word Power Made Easy.md> "Word Power Made Easy"
+The second example is valid but legacy.
+
+Invaild WikiLink:
+[ISSUE]: ../ISSUE "ISSUE"
+
+
+The first example is invalid because it doesn't have a correct type
+and path depth.
+"""
 ```
