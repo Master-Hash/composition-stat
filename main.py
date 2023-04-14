@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from os import scandir, sep
-from re import MULTILINE, compile
+from re import MULTILINE
+from typing import Literal
 from urllib.parse import ParseResult, urlparse
 
 ITEMDIR = [
@@ -12,46 +14,60 @@ ITEMDIR = [
     "情思",
 ]
 
-TITLE_REGEX = compile(r"^(.+)$\n={3,}$|^#\s(.+)$", MULTILINE)
-FOOTNOTE_REGEX = compile(r"^\[\^\d+\]:\s(.+)$", MULTILINE)
-ITEMTYPE_REGEX = compile(rf"^type:\s({'|'.join(ITEMDIR)})$", MULTILINE)
+TITLE_REGEX = re.compile(r"^(.+)$\n={3,}$|^#\s(.+)$", MULTILINE)
+FOOTNOTE_REGEX = re.compile(r"^\[\^\d+\]:\s(.+)$", MULTILINE)
+ITEMTYPE_REGEX = re.compile(rf"^type:\s({'|'.join(ITEMDIR)})$", MULTILINE)
 # TODO: get file path and filename \1 ref
-ITEMLINK_REGEX = compile(r'^\[.+\]:\s(?!#).+?(?:.md)?\s"(.+?)"$', MULTILINE)
+WIKILINK_REGEX = re.compile(r'^\[.+\]:\s(?!#).+?(?:.md)?\s"(.+?)"$', MULTILINE)
+# NOTE: see https://ihateregex.io/expr/url/ and slightly modified
+# NOTE: https://jasontucker.blog/8945/what-is-the-longest-tld-you-can-get-for-a-domain-name
+# FIXME: the closing parenthesis in Markdown syntax shouldn't become a part of the URL
+URL_REGEX = re.compile(
+    r"https?:\/\/[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9]{2,24}\b\/[-a-zA-Z0-9()!@:%_\+.~#?&\/=]*"
+)
 
 
 @dataclass
 class Composition:
     data: str
-    # item_type: Literal["人", "事", "物", "情思"]
-    item_type: str
+    item_type: Literal["人", "事", "物", "情思"]
     title: str
     # TODO file path
 
     footnotes: list[Footnote] = field(default_factory=list)
-    item_link: list[ItemLink] = field(default_factory=list)
+    wiki_link: list[WikiLink] = field(default_factory=list)
 
     @classmethod
     def from_file(cls, path: str) -> Composition:
         with open(path, "r") as f:
             data = f.read()
         _title = TITLE_REGEX.search(data)
-        title = _title and (_title[1] or _title[2]) or ""
         _item_type = ITEMTYPE_REGEX.search(data)
+        title = _title and (_title[1] or _title[2]) or ""
         item_type = _item_type[1] if _item_type else ""
 
         if not title or not item_type:
             raise ValueError(f"Title or item_type not found in {path}")
 
-        _c = cls(data=data, item_type=item_type, title=title)
+        # HACK: we have to do this because Python poorly supports
+        # Literal type.
+        if (
+            item_type == "人"
+            or item_type == "事"
+            or item_type == "物"
+            or item_type == "情思"
+        ):
+            _c = cls(data=data, item_type=item_type, title=title)
+        else:
+            raise ValueError(f"invalid item_type")
 
         _footnotes = FOOTNOTE_REGEX.findall(data)
-        footnotes = [Footnote.from_data(i, _c) for i in _footnotes]
-        _c.footnotes = footnotes
+        for i in _footnotes:
+            _c.footnotes.append(Footnote.from_data(i, _c))
 
         # TODO to make this work, we must get the file path
         # and create it recursively in advance.
-
-        _item_link = ITEMLINK_REGEX.findall(data)
+        _item_link = WIKILINK_REGEX.findall(data)
 
         compositions.append(_c)
         return _c
@@ -59,13 +75,13 @@ class Composition:
 
 @dataclass
 class Footnote:
-    # We have no order
+    # We have no order due to the design of Markdown.
     data: str
     url: ParseResult | None
-    composition_from: Composition
+    item_from: Composition
 
     @classmethod
-    def from_data(cls, data: str, composition_from: Composition) -> Footnote:
+    def from_data(cls, data: str, item_from: Composition) -> Footnote:
         """
         >>> Footnote.from_data("https://zh.moegirl.org.cn/%E9%87%8E%E5%85%BD%E5%85%88%E8%BE%88")
         Footnote(data='https://zh.moegirl.org.cn/%E9%87%8E%E5%85%BD%E5%85%88%E8%BE%88', url=ParseResult(scheme='https', netloc='zh.moegirl.org.cn', path='/%E9%87%8E%E5%85%BD%E5%85%88%E8%BE%88', params='', query='', fragment=''))
@@ -73,22 +89,46 @@ class Footnote:
         >>> Footnote.from_data("OneNote")
         Footnote(data='OneNote', url=None)
         """
-        _url = urlparse(data)
-        url = _url if _url.scheme else None
-        _c = cls(data, url, composition_from)
+
+        # HACK: urlparse doesn't raise an error if the URL is invalid.
+        # So we have to check it manually.
+        if not URL_REGEX.match(data):
+            _c = cls(data, None, item_from)
+        else:
+            _url = urlparse(data)
+            url = _url if _url.scheme else None
+            _c = cls(data, url, item_from)
         footnotes.append(_c)
         return _c
 
 
 @dataclass
-class ItemLink:
+class WikiLink:
     item_from: Composition
     item_to: Composition
+
+    @classmethod
+    def from_data(cls, data: str, item_from: Composition) -> WikiLink:
+        """
+        Valid data:
+        [家母]: 家母.md "家母"
+        [家母]: ../人/家母 "家母"
+        [家母]: ../人/家母.md "家母"
+        The second example is valid but legacy.
+
+        Invaild data:
+        [ISSUE]: ../ISSUE "ISSUE"
+        [//begin]: # "Autogenerated link references for markdown compatibility"
+        [//end]: # "Autogenerated link references"
+        The first example is invalid because it doesn't have a correct type
+        and path depth.
+        """
+        ...
 
 
 compositions: list[Composition] = []
 footnotes: list[Footnote] = []
-item_link = []
+item_link: list[WikiLink] = []
 
 
 def main():
