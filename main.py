@@ -18,7 +18,10 @@ TITLE_REGEX = re.compile(r"^(.+)$\n={3,}$|^#\s(.+)$", MULTILINE)
 FOOTNOTE_REGEX = re.compile(r"^\[\^\d+\]:\s(.+)$", MULTILINE)
 ITEMTYPE_REGEX = re.compile(rf"^type:\s({'|'.join(ITEMDIR)})$", MULTILINE)
 # TODO: get file path and filename \1 ref
-WIKILINK_REGEX = re.compile(r'^\[.+\]:\s(?!#).+?(?:.md)?\s"(.+?)"$', MULTILINE)
+WIKILINK_REGEX = re.compile(
+    r'^\[.+\]:\s(?!#)(?:\.\.\/(?:人|事|物|情思)\/)?(?:[^/\.]+?)(?:\.md)?\s"(.+?)"$',
+    MULTILINE,
+)
 # NOTE: see https://ihateregex.io/expr/url/ and slightly modified
 # NOTE: https://jasontucker.blog/8945/what-is-the-longest-tld-you-can-get-for-a-domain-name
 # FIXME: the closing parenthesis in Markdown syntax shouldn't become a part of the URL
