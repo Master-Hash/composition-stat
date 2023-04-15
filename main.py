@@ -37,7 +37,7 @@ class Composition:
     data: str
     item_type: Literal["人", "事", "物", "情思"]
     title: str
-    # NOTE: Only "事" has date.
+    # NOTE: Only 事 has date.
     # The standard practice is to inherit Composition to represent different
     # types of compositions, and add a date field for 事, but I'm too lazy.
     # So no overload here. Keep in mind!
